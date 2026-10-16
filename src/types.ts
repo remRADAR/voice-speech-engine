@@ -4,7 +4,7 @@ export interface AudioChunk {
   seq: number;
   /** Audio bytes (format per session config). */
   data: Uint8Array;
-  /** True on the final chunk of an utterance. */
+  /** True on exactly the final chunk of a normally completed utterance. */
   final: boolean;
 }
 
@@ -17,18 +17,29 @@ export interface SpeechRequest {
 
 /**
  * Replaceable speech-synthesis provider. Domain logic must never couple to a
- * concrete vendor. Implementations must support cancellation via the returned
- * controller and must not require server-side secrets in the browser.
+ * concrete vendor. Implementations should observe the optional AbortSignal;
+ * returned handles must support idempotent cancellation and must not require
+ * server-side secrets in the browser. Providers must check manager-issued
+ * session authorization before producing audio.
  */
 export interface SpeechProvider {
   readonly id: string;
+  /** Provider-declared provenance; queue verifies this against every returned handle. */
+  readonly isPlaceholder: boolean;
   /** True only if the provider supports streamed chunk delivery. */
   readonly supportsStreaming: boolean;
-  synthesize(request: SpeechRequest, session: SpeechSession): Promise<SynthesisHandle>;
+  synthesize(
+    request: SpeechRequest,
+    session: SpeechSession,
+    options?: { signal?: AbortSignal },
+  ): Promise<SynthesisHandle>;
 }
 
 export interface SynthesisHandle {
-  /** Stream of ordered chunks for this utterance. */
+  /** Runtime provenance carried to all consumers; synthetic bytes are visibly placeholders. */
+  readonly providerId: string;
+  readonly placeholder: boolean;
+  /** Stream of ordered chunks; normal completion must include a final chunk. */
   stream: AsyncIterable<AudioChunk>;
   /** Immediately stop synthesis and end the stream. Idempotent. */
   cancel(): Promise<void>;
@@ -37,18 +48,31 @@ export interface SynthesisHandle {
 export interface SpeechSession {
   readonly id: string;
   /** Subject of the session — a user ID or "anonymous". */
-  subject: string;
-  /** Capabilities granted to this session. */
-  capabilities: SessionCapabilities;
-  createdAt: string;
+  readonly subject: string;
+  /** Frozen capabilities from a SessionManager-issued snapshot. */
+  readonly capabilities: Readonly<SessionCapabilities>;
+  readonly createdAt: string;
 }
 
 export interface SessionCapabilities {
-  synthesize: boolean;
-  /** Real voice enrollment — must be false unless explicit owner authorization AND provider-compliant consent exist. */
-  enrollVoice: boolean;
+  readonly synthesize: boolean;
+  /** Real voice enrollment — false unless a configured validator verifies consent. */
+  readonly enrollVoice: boolean;
   /** Conversation AI integration — independently replaceable, off by default. */
-  useConversationAi: boolean;
+  readonly useConversationAi: boolean;
+}
+
+export interface ConsentValidationRequest {
+  consentRecordId: string;
+  action: "authorize-enrollment" | "register-enrolled-profile";
+  subjectId?: string;
+  authorizedBy?: string;
+  voiceProfileId?: string;
+}
+
+/** The host must implement this against its trusted, provider-compliant consent records. */
+export interface ConsentValidator {
+  validateConsent(input: ConsentValidationRequest): boolean;
 }
 
 export interface PronunciationRule {
@@ -61,7 +85,7 @@ export interface PronunciationRule {
 
 export interface VoiceProfile {
   id: string;
-  /** "synthetic" | "licensed" | "enrolled". Enrolled requires explicit consent records. */
+  /** "synthetic" | "licensed" | "enrolled". Enrolled requires validated consent. */
   kind: "synthetic" | "licensed" | "enrolled";
   label: string;
   locale?: string;
