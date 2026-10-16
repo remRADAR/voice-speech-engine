@@ -16,6 +16,7 @@
 - **Changed on branch:** the synthetic provider tracks stream completion, wakes pending iterators on completion/cancel, and returns `done: true` after the queue drains. The multi-chunk fixture was corrected to actually cross the chunk threshold and contain additional words.
 - Added `package-lock.json`, TypeScript ESLint flat config, maintained ESLint 10 / typescript-eslint development dependencies, and CI `contents: read` permission.
 - **Locally verified:** `npm ci`, `npm run lint`, `npm run typecheck`, `npm test` (3 files / 16 tests), `npm run build`, and `npm audit --omit=dev --audit-level=moderate` all pass; audit reported zero production dependency vulnerabilities.
+- **Actual GitHub Actions:** PR [#6](https://github.com/remRADAR/voice-speech-engine/pull/6), run [38878731212](https://github.com/remRADAR/voice-speech-engine/actions/runs/38878731212), passed all workflow steps on commit `9202fd18ff552c4e2cc7c5dfe61a43873879cafc`.
 
 ## Remaining findings
 
@@ -26,4 +27,4 @@
 
 ## Status and next gate
 
-**BLOCKED** as a streaming speech product. The local stream lifecycle regression is repaired and package quality gates pass on the audit branch, but the real provider, robust concurrent queue semantics, and validated consent workflow remain unimplemented. No post-change GitHub Actions result exists. No real audio was uploaded, no provider was activated, no package was published, and no production system was accessed.
+**BLOCKED** as a streaming speech product. The local stream lifecycle regression is repaired and both local and PR Actions gates pass, but the real provider, robust concurrent queue semantics, and validated consent workflow remain unimplemented. PR #6 is open for review and has not been merged. No real audio was uploaded, no provider was activated, no package was published, and no production system was accessed.
