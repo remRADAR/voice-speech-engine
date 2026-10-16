@@ -7,7 +7,7 @@ describe("SyntheticTestProvider (offline, deterministic)", () => {
     const mgr = new SessionManager();
     const session = mgr.create("s1", "user-1");
     const provider = new SyntheticTestProvider();
-    const handle = await provider.synthesize({ text: "one two three four five six seven eight nine ten" }, session);
+    const handle = await provider.synthesize({ text: "one two three four five six seven eight nine ten eleven twelve" }, session);
     const chunks = await collectOrdered(handle);
     expect(chunks.length).toBeGreaterThan(1);
     expect(chunks[chunks.length - 1]?.final).toBe(true);

@@ -15,34 +15,40 @@ export class SyntheticTestProvider implements SpeechProvider {
     const parts = chunkText(request.text || "");
     if (parts.length === 0) throw new Error("Nothing to synthesize");
     let cancelled = false;
+    let completed = false;
     const queue: AudioChunk[] = [];
-    let resolveNext: (() => void) | null = null;
+    const waiter: { resolve?: () => void } = {};
+    const wake = () => {
+      waiter.resolve?.();
+      waiter.resolve = undefined;
+    };
 
     // Emit chunks asynchronously; cancellation stops production immediately.
-    (async () => {
-      for (let i = 0; i < parts.length; i++) {
-        if (cancelled) break;
-        const chunk: AudioChunk = {
-          seq: i,
-          data: new TextEncoder().encode(parts[i]!),
-          final: i === parts.length - 1,
-        };
-        queue.push(chunk);
-        resolveNext?.();
-        resolveNext = null;
-        await new Promise((r) => setTimeout(r, 0));
+    void (async () => {
+      try {
+        for (let i = 0; i < parts.length; i++) {
+          if (cancelled) break;
+          const chunk: AudioChunk = {
+            seq: i,
+            data: new TextEncoder().encode(parts[i]!),
+            final: i === parts.length - 1,
+          };
+          queue.push(chunk);
+          wake();
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+      } finally {
+        completed = true;
+        wake();
       }
-      // Ensure the consumer wakes on early termination too.
-      resolveNext?.();
-      resolveNext = null;
     })();
 
     const stream: AsyncIterable<AudioChunk> = {
       [Symbol.asyncIterator]() {
         return {
           async next(): Promise<IteratorResult<AudioChunk>> {
-            while (queue.length === 0 && !cancelled) {
-              await new Promise<void>((r) => { resolveNext = r; });
+            while (queue.length === 0 && !cancelled && !completed) {
+              await new Promise<void>((resolve) => { waiter.resolve = resolve; });
             }
             const value = queue.shift();
             if (value === undefined) return { done: true, value: undefined };
@@ -55,9 +61,9 @@ export class SyntheticTestProvider implements SpeechProvider {
       stream,
       async cancel() {
         cancelled = true;
+        completed = true;
         queue.length = 0;
-        resolveNext?.();
-        resolveNext = null;
+        wake();
       },
     };
   }
